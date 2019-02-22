@@ -2,6 +2,7 @@ package fr.innodev.trd.gpsbasedemo;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Location;
 import android.os.Build;
 import android.os.Handler;
@@ -20,8 +21,12 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
@@ -33,10 +38,24 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private LocationRequest mLocationRequest;
     private LocationCallback mLocationCallback;
     private Log log;
+    private int nbPos;
+    private boolean first;
+    private Marker latestPosMark;
+    private LatLng curPos;
+    private LatLng lastPos;
+    private LatLng firstPos;
+    private Marker firstPosMark;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        nbPos = 0;
+        first = true;
+        latestPosMark = null;
+        curPos = null;
+        lastPos = null;
+        firstPos = null;
 
         while (!permissionGranted()) ;
 
@@ -75,8 +94,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         };
 
         mLocationRequest = LocationRequest.create();
-        mLocationRequest.setInterval(20000);
-        mLocationRequest.setFastestInterval(20000);
+        mLocationRequest.setInterval(5000);
+        mLocationRequest.setFastestInterval(5000);
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
         mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                 mLocationCallback,
@@ -98,15 +117,63 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
         mMap.setMapType(GoogleMap.MAP_TYPE_HYBRID);
+
     }
 
     private void updateMapDisplay(Location myLocation) {
         // Add a marker in Sydney and move the camera
-        LatLng curPos = new LatLng(myLocation.getLatitude(), myLocation.getLongitude());
-        mMap.addMarker(new MarkerOptions().position(curPos).title("Position courante"));
-        float zoom = mMap.getMaxZoomLevel();
-        log.d("INFO", "Zoom Max = " + zoom);
-        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(curPos, zoom - 3.0f));
+        if(latestPosMark!=null) {
+            lastPos = curPos;
+        }
+        curPos = new LatLng(myLocation.getLatitude(), myLocation.getLongitude());
+        if(first){
+            firstPos = curPos;
+            float zoom = mMap.getMaxZoomLevel();
+            log.d("INFO", "Zoom Max = " + zoom);
+            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(curPos, zoom - 3.0f));
+            first = false;
+            firstPosMark = mMap.addMarker(new MarkerOptions()
+                    .position(firstPos)
+                    .title("Position  0")
+                    .visible(false)
+                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)));
+            latestPosMark = mMap.addMarker(new MarkerOptions()
+                    .position(firstPos)
+                    .title("Position  " + nbPos));
+        }else {
+            firstPosMark.setVisible(true);
+            latestPosMark.setVisible(false);
+            latestPosMark.setIcon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE));
+            mMap.addPolyline(new PolylineOptions()
+                    .add(lastPos, curPos)
+                    .width(5)
+                    .color(Color.RED));
+            Log.d("INFO", "updateMapDisplay: "+getDistanceFromLatLonInKm(lastPos.latitude,lastPos.longitude,curPos.latitude,curPos.longitude)*1000+"m");
+            latestPosMark = mMap.addMarker(new MarkerOptions()
+                    .position(curPos)
+                    .title("Position " + nbPos));
+        }
+        nbPos++;
+
+    }
+
+
+    private double getDistanceFromLatLonInKm(double lat1, double lon1,double lat2,double lon2) {
+        int R = 6371; // Radius of the earth in km
+        double dLat = deg2rad(lat2-lat1);  // deg2rad below
+        double dLon = deg2rad(lon2-lon1);
+        double a =
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                                Math.sin(dLon/2) * Math.sin(dLon/2)
+                ;
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        double d = R * c; // Distance in km
+        return d;
+    }
+
+    private double deg2rad(double deg) {
+        return deg * (Math.PI/180);
     }
 
     private boolean permissionGranted() {
