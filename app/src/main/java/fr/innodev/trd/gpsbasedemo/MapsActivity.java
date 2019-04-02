@@ -1,11 +1,14 @@
 package fr.innodev.trd.gpsbasedemo;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
-import android.os.Build;
-import android.os.Handler;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
@@ -25,9 +28,7 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
-import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
@@ -45,6 +46,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private LatLng lastPos;
     private LatLng firstPos;
     private Marker firstPosMark;
+    private SensorManager mSensorManager;
+    private Sensor mstepCounter;
+    private int stepCounter = 0;
+    private int counterSteps = 0;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,6 +64,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         firstPos = null;
 
         while (!permissionGranted()) ;
+
+        mSensorManager = (SensorManager)getSystemService(Context.SENSOR_SERVICE);
+        mstepCounter = mSensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+        mSensorManager.registerListener(mSensorEventListener, mstepCounter, 1000000);
 
         setContentView(R.layout.activity_maps);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
@@ -143,7 +153,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }else {
             firstPosMark.setVisible(true);
             latestPosMark.setVisible(false);
-            latestPosMark.setIcon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE));
             mMap.addPolyline(new PolylineOptions()
                     .add(lastPos, curPos)
                     .width(5)
@@ -152,9 +161,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             latestPosMark = mMap.addMarker(new MarkerOptions()
                     .position(curPos)
                     .title("Position " + nbPos));
+            Log.d("TEST",directionLon(lastPos.longitude,curPos.longitude)+""+directionLat(lastPos.latitude,curPos.latitude));
         }
         nbPos++;
-
+        Log.d("INFO","NbStep: "+stepCounter);
     }
 
 
@@ -188,4 +198,75 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
+
+    final SensorEventListener mSensorEventListener = new SensorEventListener() {
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+            //Nothing to do
+        }
+
+        public void onSensorChanged(SensorEvent event) {
+            if (counterSteps < 1) {
+                // initial value
+                counterSteps = (int)event.values[0];
+            }
+
+            // Calculate steps taken based on first counter value received.
+            stepCounter = (int)event.values[0] - counterSteps;
+        }
+    };
+
+    private String directionLat(double lat1, double lat2){
+        double tmp1;
+        double tmp2;
+        if(lat1<0){
+            tmp1= 360+lat1;
+        }else{
+            tmp1=lat1;
+        }
+
+        if(lat2<0){
+            tmp2= 360+lat2;
+        }else{
+            tmp2=lat2;
+        }
+
+        if((tmp1-tmp2)>0){
+            //OUEST
+            return "O";
+        }else if((tmp1-tmp2)<0){
+            //EST
+            return "E";
+        }else{
+            //pas bouger sur axe EST/OUEST
+            return "";
+        }
+    }
+
+    private String directionLon(double lon1, double lon2){
+        double tmp1;
+        double tmp2;
+        if(lon1<0){
+            tmp1= 360+lon1;
+        }else{
+            tmp1=lon1;
+        }
+
+        if(lon2<0){
+            tmp2= 360+lon2;
+        }else{
+            tmp2=lon2;
+        }
+
+        if((tmp1-tmp2)>0){
+            //SUD
+            return "S";
+        }else if((tmp1-tmp2)<0){
+            //NORD
+            return "N";
+        }else{
+            //pas bouger sur axe NORD/SUD
+            return "";
+        }
+    }
+
 }
